@@ -16,7 +16,7 @@ description = "A Tech Blog"
 # Appearance settings
 theme = 'auto'
 colorPalette = 'default'
-hideHeader = true
+hideHeader = false
 
 # Intro on main page, content is markdown
 homeIntroTitle = 'Hi!'
