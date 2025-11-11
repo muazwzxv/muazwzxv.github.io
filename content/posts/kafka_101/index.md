@@ -1,7 +1,7 @@
 ---
 title: "The internals of Kafka"
 author: "Muaz Wazir"
-date: "2023-11-12"
+date: "2025-11-11"
 summary: "Your one stop shop to understanding Kafka"
 readTime: true
 tags: ["kafka"]

@@ -1,7 +1,7 @@
 ---
 title: "Setting up docker compose for your local environment"
 author: "Muaz"
-date: "2023-11-12"
+date: "2025-11-11"
 summary: "Setting up docker compose for your local environment"
 readTime: true
 tags: ["docker"]

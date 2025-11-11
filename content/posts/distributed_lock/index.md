@@ -1,7 +1,7 @@
 ---
 title: "Distributed lock, a concurrency control mechanism"
 author: "Muaz Wazir"
-date: "2023-11-12"
+date: "2025-11-11"
 summary: "How well can your pods/instance deal with potential race conditions and ensure data consistency?"
 readTime: true
 tags: ["lock", "distributed systems"]

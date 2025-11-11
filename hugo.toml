@@ -19,9 +19,16 @@ colorPalette = 'default'
 hideHeader = false
 
 # Intro on main page, content is markdown
-homeIntroTitle = 'Hi!'
+homeIntroTitle = 'Why hello there!'
 homeIntroContent = """
-I'm a Software Engineer specialising in Backend development, interested in databases, cloud computing and distributed systems
+I'm Muaz, a backend engineer working in fintech. I build systems that process loans, handle payments, and try not to lose people's money.
+
+This blog exists because I keep running into problems that aren't well-documented, or are documented in ways that miss the important parts. The parts you only learn after something breaks in production at 2am.
+
+I write about distributed systems, Go, Kafka, and the kind of backend infrastructure that has to work even when everything else is on fire. Most of what I share comes from actual production systems at scale, the lessons that came from debugging disasters, not from reading documentation.
+
+Just technical deep dives when I learn something worth writing down.
+If you're building similar systems and want to skip some of the painful lessons, you're in the right place.
 """
 
 # Collection to display on home
