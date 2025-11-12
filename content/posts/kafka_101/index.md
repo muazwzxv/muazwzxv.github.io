@@ -7,7 +7,7 @@ readTime: true
 tags: ["kafka"]
 showTags: false
 hideBackToTop: true
-draft: false
+draft: true
 ---
 
 Test content

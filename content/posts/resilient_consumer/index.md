@@ -7,7 +7,7 @@ readTime: true
 tags: ["kafka", "consumer"]
 showTags: false
 hideBackToTop: true
-draft: false
+draft: true
 ---
 
 Test content

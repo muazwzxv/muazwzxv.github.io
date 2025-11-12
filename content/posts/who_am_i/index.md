@@ -5,8 +5,7 @@ author: "Muaz Wazir"
 date: "2025-11-11"
 readTime: true
 hideBackToTop: false
-draft: false
+draft: true
 ---
-
 
 this is the journey

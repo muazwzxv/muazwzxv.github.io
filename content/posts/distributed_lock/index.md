@@ -7,7 +7,7 @@ readTime: true
 tags: ["lock", "distributed systems"]
 showTags: false
 hideBackToTop: true
-draft: false
+draft: true
 ---
 
 Test content
