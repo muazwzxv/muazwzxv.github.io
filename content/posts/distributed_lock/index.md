@@ -1,15 +1,17 @@
 ---
 title: "Distributed lock, a concurrency control mechanism"
 author: "Muaz Wazir"
-date: "2025-11-11"
+date: "2025-11-16"
 toc: true
-summary: "How well can your pods/instance deal with potential race conditions and ensure data consistency?"
+summary: "What is distributed locking and how I've dealt with it in the past"
 readTime: true
 tags: ["lock", "distributed systems"]
 showTags: false
 hideBackToTop: true
 draft: false
 ---
+
+Here's my first article, here we go!!!
 
 # What is locking?
 
@@ -46,7 +48,7 @@ Worker background job logic
 - query out the details of pending jobs
 - executes the job
 
-I'd argue that this logic works..... if you're building for fun and this is not meant to serve any real traffic or critical systems (anything related to money, user data)
+I'd argue that this logic works..... if you're building for fun, but not at scale (anything related to money, user data)
 
 If you haven't caught on yet, the problem with this approach is that it's not scalable. If you have multiple workers, they'll all try to pick up the same job, leading to
 - Duplicate executions
@@ -100,7 +102,7 @@ My approach to distributed lock requires Redis as an infrastructure dependencies
 
 This is a high level design for taking a lock using Redis.
 
-![image](distributed_lock_6.png "Flow diagram for taking a lock")
+![image](distributed_lock_7.png "Flow diagram for taking a lock")
 
 Let's revisit the logic prior to Distributed lock
 
@@ -112,12 +114,17 @@ Worker background job logic
 Worker background job logic with Distributed Lock
 - polls the database for pending jobs
 - query out the details of pending jobs
-- attempt to take a lock (you need to design your lock key format, the example I'm using `job_uuid#job_name`)
+- attempt to take a lock (design your lock key)
 - lock attempt successful
 - executes the job
 - release lock when succeed
 
-ps: Important to set a timeout for the lock to ensures when something eventually fails, the locks get released and other workers can take a lock and executes the job
+**Lock key**
+Lock keys should uniquely identify the work. For the example above `sample-uuid#send_email`. This prevents Worker 1 from locking 'send_email' while Worker 2 processes a different 'send_email' job with a different UUID.
+
+Keep in mind
+- The lock timeout is critical: if a worker crashes while holding a lock, the timeout ensures other workers can eventually retry the job. Set this timeout longer than your expected job duration. For long-running jobs, you'll need to implement lock renewal (not covered here).
+- This approach assumes jobs can be safely retried if a worker crashes mid-execution. For critical operations (payments), you need idempotency keys in your job processing logic, not just distributed locks. You also need to handle lock renewal for jobs that run longer than the timeout.
 
 ### How does `locking` works in Redis?
 
@@ -125,7 +132,7 @@ Good question, Redis offers sets of APIs that you can leverage to achieve this `
 
 We'll be using Go for the sample code
 
-The `Lock()` function uses the SETNX function by redis, the function has been deprecated in favor or `Redlock` which I haven't explore (perhaps I'll update this to show the Redlock example)
+The `Lock()` function uses Redis's SETNX (SET if Not eXists) with a timeout. This provides atomic lock acquisition with automatic expiration
 
 `SETNX` is basically SET IF NOT EXISTS, this function by redis takes in a `key` and `value` as parameters, if Redis returns 1 it means that the lock was successfully acquired, 0 if failed. [reference](https://redis.io/docs/latest/commands/setnx/)
 ```go
@@ -145,7 +152,6 @@ The `Unlock()` releases the lock if the caller of the function is the one that a
 
 ```go
 func (l *Locker) Unlock(ctx context.Context) error {
-	// Lua script ensures atomicity: checks the value and deletes the key if the value matches.
 	script := "if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end"
 	result, err := l.client.Eval(ctx, script, []string{l.key}, l.value).Result()
 	if err != nil {
@@ -156,6 +162,7 @@ func (l *Locker) Unlock(ctx context.Context) error {
 	}
 	return nil
 }
+// The Lua script ensures atomicity, it checks ownership before deleting. This prevents Worker A from accidentally releasing Worker B's lock if Worker A's lock expired and Worker B acquired it.
 ```
 
 Here's a minimal library in Go to start using distributed locking with Redis [github](https://github.com/muazwzxv/dist-lock)
