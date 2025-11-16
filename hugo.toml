@@ -14,13 +14,12 @@ tag = 'tags'
     dir = ':cacheDir/images'
 
 [params]
-# Meta description
 description = "A Tech Blog"
-
-# Appearance settings
-theme = 'auto'
-colorPalette = 'default'
+theme = 'dark'
+colorPalette = 'gruvebox'
 hideHeader = false
+
+
 
 # Intro on main page, content is markdown
 homeIntroTitle = 'Why hello there!'
