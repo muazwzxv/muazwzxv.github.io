@@ -165,6 +165,8 @@ func (l *Locker) Unlock(ctx context.Context) error {
 // The Lua script ensures atomicity, it checks ownership before deleting. This prevents Worker A from accidentally releasing Worker B's lock if Worker A's lock expired and Worker B acquired it.
 ```
 
-Here's a minimal library in Go to start using distributed locking with Redis [github](https://github.com/muazwzxv/dist-lock)
+- Here's a minimal library in Go to start using distributed locking with Redis [github](https://github.com/muazwzxv/dist-lock)
+- Library was extracted out from an open source project [blnk project](https://github.com/blnkfinance/blnk)
+- If you want to read more about distributed lock, here's a great material from Matin Klepman, the author of Designing Data Intensive Applications [link](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
 
-Library was extracted out from an open source project [blnk project](https://github.com/blnkfinance/blnk)
+Thank you for reading
