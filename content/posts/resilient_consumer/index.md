@@ -1,21 +1,21 @@
 ---
 title: "How resilient is your consumer?"
 author: "Muaz Wazir"
-date: "2025-11-11"
+date: "2026-05-09"
 toc: true
 summary: "How well can your consumer recover from failure"
 readTime: true
 tags: ["kafka", "consumer", "sqs", "resiliency"]
 showTags: true
 hideBackToTop: true
-draft: true
+draft: false
 ---
 
 
 ## The Problem
 ---
 
-In modern systems, you'll find it pretty common where we'd have asynchronous components. Mechanism such as `queues` and `message broker` are an important piece to building a resilient and scalable systems. Regardless of a monolithic backend or a microservices architecture, you'll see this mechanism being used for asyncrhonous processing, event driven architecture and etc.
+In modern systems, you'll find it pretty common where we'd have asynchronous components. Mechanism such as `queues` and `message broker` are an important piece to building a resilient and scalable systems. Regardless of a monolithic backend or a microservices architecture, you'll see this mechanism being used for asynchronous processing, event driven architecture and etc.
 
 Despite all the advantages of this architecture decision. It comes with some tricky nuances when it comes to handling errors that are both transient and non transient. Which begs the question
 
@@ -36,16 +36,16 @@ To illustrate how a kafka is being used in systems. Let's start with a diagram
 ![image](consumer_1.png "Typical kafka pub sub setup")
 
 **Publishers**
-- Kafka publishers fire events into a topic. They're the upstream producers — whenever something happens in your system (a user signed up, a payment was processed, an order was fulfilled), the publisher emits that event to the relevant topic so downstream systems can react to it.
+- Kafka publishers fire events into a topic. They're the upstream producers, whenever something happens in your system (a user signed up, a payment was processed, an order was fulfilled), the publisher emits that event to the relevant topic so downstream systems can listen and react to it.
 
 **Consumers**
 - Kafka consumers subscribe to topics and process whatever events come through. A consumer pulls messages off the queue, does something useful with them (updates a database, triggers a notification, runs business logic), and then moves on to the next message. In a typical setup, you might have multiple consumer instances all reading from the same topic in parallel.
 
 **Topics**
-- A topic is a named channel — think of it as a logical inbox. Publishers drop messages in here, consumers pick them up from here. What makes Kafka different from a regular queue is that messages in a topic are retained for a configurable period (usually days), so consumers can re-read old messages if needed, and multiple independent consumers can subscribe to the same topic without interfering with each other.
+- A topic is a named channel. Publishers drop messages in here, consumers pick them up from here. What makes Kafka different from a regular queue is that messages in a topic are retained for a configurable period (message durability), so consumers can re-read old messages if needed, and multiple independent consumers can subscribe to the same topic without interfering with each other (consumer groups)
 
 **Partitions**
-- Under the hood, every topic is split into partitions. Partitions are the secret sauce behind Kafka's parallelism — each partition can be consumed by a different consumer in your consumer group simultaneously. Within a single partition, messages are strictly ordered and immutable. This is powerful, but it comes with a catch: if a consumer gets stuck on one message in a partition, everything behind that message waits its turn. That clawback is what we'll get into next.
+- Under the hood, every topic is split into partitions. Partitions are the secret sauce behind Kafka's parallelism, each partition can be consumed by a different consumer in your consumer group simultaneously. Within a single partition, messages are strictly ordered and immutable. This is powerful, but it comes with a catch. Assuming a consumer gets stuck on one message in a partition, everything behind that message waits its turn. That clawback is what we'll get into next.
 
 
 ## A production system handling thousands - millions messages per day
@@ -83,7 +83,7 @@ In such situation you're left with several `naive` options
 
 Assuming the problem was intermittent, some dependency has degraded that's causing the an impact to the consumer. We could setup a best effort retry with a simple backoff (retry n number of times and just move on if that fails). This is better than nothing but you're now left with a partially failed transactions and a broken state (assuming you system is eventually consistent).
 
-To be fair this is better than no retry mechanism at all and a lot of system start with this approach to balance speed of development and system reliability. Assming you're only observing some intermittent failures and only 1% of message retries are being exhausted and dropped, it's probably fine to just manually intervene to patch the broken state or repubished the drop message. 
+To be fair this is better than no retry mechanism at all and a lot of system start with this approach to balance speed of development and system reliability. Assuming you're only observing some intermittent failures and only 1% of message retries are being exhausted and dropped, it's probably fine to just manually intervene to patch the broken state or republish the drop message. 
 
 But what happens when one of your dependencies has degraded and was rejecting all new connections for 2 hours straight. 100% of messages were dropped for that 2 hours. Good luck to oncall engineer that has to figure out how to reconcile those messages
 
@@ -97,14 +97,14 @@ This option is as explained in earlier discussions. When a failure happens we le
 poll -> fail -> don't ack() -> poll -> fail ....
 ```
 
-However, this method does ensures that all messages gets processed ...... even poison messages (though it might crash the consumer, yikes)
+However, this method does ensure that all messages gets processed ...... even poison messages (though it might crash the consumer, yikes)
 
 The downside is clear here.
 - Consumer lags increases
 - Any transactions and any user journey will get stuck
 - It'll be worse for poison messages (no way to self recover)
 
-Both options doesn't look so good right? Best effort is the most viable here if you're considering the two options here
+Both options don't look so good right? Best effort is the most viable here if you're considering the two options here
 
 
 ## The Retry Pattern: Decouple and Defer
@@ -112,12 +112,9 @@ Both options doesn't look so good right? Best effort is the most viable here if 
 
 So what do we do about it? At work, we had this exact problem. The moment we realized our consumer was failing synchronously that the Kafka partition was blocked while we retried in place, we knew we had to change the design.
 
-The core premise of the solutuion is to **stop handling failure inside the consumer.** The moment you treat a failed message as a problem the consumer needs to solve right now, you're introducing a mode in your consumer where it needs to handle the failure at the expense of throughput. Instead, park it somewhere else, commit the offset like nothing happened, and move on.
+The core premise of the solution is to **stop handling failure inside the consumer.** The moment you treat a failed message as a problem the consumer needs to solve right now, you're introducing a mode in your consumer where it needs to handle the failure at the expense of throughput. Instead, park it somewhere else, commit the offset like nothing happened, and move on.
 
-That's the "decouple and defer" principle. The failed message gets handed off to a separate system whose entire job is handling retries. Kafka stays clean and fast it's the hot path for happy path processing. The retry system is the warm path where problem messages go to be tried again later.
-
-If you think about it, this is naturally a mechanism to handle load shedding. Imagine there's a surge in messages in your system and your system is facing issues keeping up. 
-
+That's the `decouple and defer` principle. The failed message gets handed off to a separate system whose entire job is handling retries. Kafka stays clean and fast it's the hot path for happy path processing. The retry system is the warm path where problem messages go to be tried again later.
 
 ### Enter SQS
 ---
@@ -128,7 +125,7 @@ At work, we settled on SQS as that warm path. Two reasons made it the right fit:
 - When a message lands in SQS, you can hide it for N number of seconds from other SQS consumers in your fleet. After those N seconds, it reappears automatically, no cron jobs, no polling logic, no custom retry scheduler to build and maintain. SQS handles the timing for you.
 
 **Redrive policy.** 
-- This was the killer feature. You configure SQS to say "if a message is received X times and still not deleted, move it here." That "here" is your dead letter queue. We didn't have to write a single line of code to get automatic DLQ behavior. it's built into the SQS queue configuration. It's considered best practice with SQS to also provision an SQS DLQ alongside your main queue. 
+- This was the killer feature. You configure SQS to say `if a message is received X times and still not deleted, move it here.` That `here` is your dead letter queue. We didn't have to write a single line of code to get automatic DLQ behavior. it's built into the SQS queue configuration. It's considered best practice with SQS to also provision an SQS DLQ alongside your main queue. 
 
 The mental model we use internally is three tiers:
 - **Kafka** = hot path (real-time, happy path, clean)
@@ -139,14 +136,14 @@ The mental model we use internally is three tiers:
 ### The Key Behavior
 ---
 
-There's one rule that makes this all work, **always commit the Kafka offset, even when you fail.**
+There's one rule that makes this all work, `always commit the Kafka offset, even when you fail.`
 
 This was the biggest mental shift for the team. When a message fails, you publish it to SQS and then commit the offset anyway. You're not ignoring the failure, you're deferring it. The message isn't lost. It's sitting in SQS, waiting to be retried. Kafka moves on, your consumer stays healthy, and your partition never clogs.
 
 ### Load Shedding and Throttling
 ---
 
-This pattern does more than just retry failed messages. It also naturally sheds load when things go wrong.
+This pattern does more than just retry failed messages. It also naturally sheds load when there's a surge in traffic and your downstream couldn't keep up and has degraded.
 
 Here's what we discovered in practice, when our downstream dependency is struggling, the consumer fails fast on those messages, pushes them to SQS, and keeps working through the partition. We're not piling more requests onto an already struggling system, we're deferring them. The consumer stays productive, processing whatever it can handle right now.
 
@@ -159,94 +156,126 @@ This allows our consumer to still operate under a degraded state
 ## Architecture Walkthrough
 ---
 
-<!-- Diagram idea: Kafka topic → Consumer → (success → commit offset + ack) | (failure → publish to SQS → commit offset) then SQS → Retry Worker → (success → delete from SQS) | (failure after max attempts → DLQ) -->
+Voilà
 
-<!-- Step by step:
-1. Consumer polls Kafka, gets batch of messages
-2. For each message, attempt to process
-3. On success: commit offset (or rely on batch commit), nothing else
-4. On failure: publish the message (or just key + payload + metadata) to the SQS retry queue, then commit the Kafka offset anyway
-5. A separate retry worker (could be a Lambda, a cron-based process, or a long-lived service) polls the SQS queue
-6. Retry worker attempts processing. If it succeeds, delete the message from SQS.
-7. If it fails, SQS's visibility timeout makes the message reappear after a delay -->
+![image](consumer_4.png "Kafka consumer with a retry consumer in SQS")
 
-<!-- Important detail: commit the Kafka offset even on failure. This is the critical mental shift. The message isn't lost — it's in SQS. You're not ignoring the failure, you're deferring it to a system purpose-built for retries. -->
+Let's walk through the flow step by step:
 
-<!-- Data flow considerations:
-- What exactly do you put in SQS? The full Kafka message body? Just an ID and a reference? Include metadata like original topic, partition, offset, failure reason, retry count?
-- Message size limits: SQS max 256KB, so large payloads may need S3 with SQS carrying a pointer -->
+### **Happy Path:**
+1. Your Kafka consumer polls a batch of messages from the topic
+2. For each message, it attempts to process (calls downstream APIs, updates databases, etc)
+3. On success, commit the Kafka offset `ack()` and move on to the next message
+
+### **When Things Go Wrong:**
+4. On failure, instead of retrying in place, the consumer immediately publishes the failed message to your SQS retry queue. What you publish matters. You need to include the Kafka message body, but also consider adding metadata like the original topic, partition, offset, failure reason and the trace ID. This information will be crucial if the message ever reaches DLQ.
+5. **Regardless of failure** commit the Kafka offset anyway. This is the mental shift. Remember, you're not suppressing the errors, you're deferring it thus offloading the responsibility to the retry queue to handle errors and retries.
+6. Your retry worker (could be a Lambda, a separate runtime, or even the same consumer reading from SQS) polls the retry queue
+7. It attempts to process the message from SQS
+8. On success: delete the message from SQS indicating a successful retry
+9. On failure: don't delete it. SQS's visibility timeout makes it reappear after N number of seconds for another attempt
+10. After `maxReceiveCount` failed attempts: SQS automatically moves it to the DLQ (french kiss)
+
+### **The Human Loop:**
+11. (CloudWatch, datadog, grafana) alarm fires because DLQ has messages
+12. Engineer intervenes, looks at the message payload, checks the error context, identifies the root cause (bug, config issue, external dependency problem)
+13. Fixes the issue
+14. Redrives messages from DLQ back to the main retry queue (or processes them manually if it's a one-off)
+
+***To keep in mind***
+- SQS has a 256KB message size limit. If your Kafka messages are large, you might need to store the payload in S3 and just put a pointer in SQS.
+
 
 ## Retry Logic & Thresholds
+---
 
-<!-- The retry policy — how many times, how long between attempts, when to give up -->
+So how do you actually configure this thing? Here are the parameters that matters
 
-<!-- SQS redrive policy:
-- `maxReceiveCount`: the number of times a message can be received before being sent to DLQ
-- How to pick this number: too low = messages die too early, too high = messages sit in limbo for too long
-- Anecdote: we started with 3, moved to 5 after seeing transient DB failovers take ~2 minutes to resolve -->
 
-<!-- Visibility timeout and backoff:
-- SQS visibility timeout: how long the message stays hidden after being received
-- Fixed vs exponential backoff: fixed = simple but can hammer a recovering system, exponential = gentler
-- SQS doesn't natively support exponential backoff per-message (visibility timeout is queue-level). Workaround: set queue timeout to the max, and your retry worker can change the visibility timeout per message as it sees more retries.
-- Mention `ChangeMessageVisibility` API for implementing custom backoff -->
+### maxReceiveCount
+---
 
-<!-- When to give up: the DLQ
-- After maxReceiveCount is hit, SQS automatically moves the message to the configured DLQ
-- DLQ is your "manual intervention" inbox
-- Set up a CloudWatch alarm on DLQ depth — if there's anything in there, someone needs to look
-- DLQ messages should carry original context: what was the original Kafka message? What error did it hit on each attempt? This makes debugging actually possible -->
+This represents how many times SQS will let a message be received prior to exhausting it retries and moving the message to the DLQ
 
-<!-- The human loop:
-- Engineer gets paged (or checks dashboard) → sees DLQ has messages → inspects payload and error context → fixes root cause (bug, config, external dependency) → redrives messages from DLQ back to the main SQS queue -->
+We initially started with 3 (seemed reasonable). But what we've observed is that during our disaster recovery practice where we were testing the swtichover to DR site (from ap-southeast-1 to ap-southeast-5). The increased number of latency had caused the retry to be exhaused fairly quick (mind you we didn't set an ideal visibility timeout at that time). Hence retries were coming in with very small window of backoff.  
+
+We ultimately increased it to 10 which gave us more runway for retries, but your mileage may vary based on your downstream's availability and SLA.
+
+
+### Visibility Timeout and Backoff
+---
+
+The visibility timeout controls how long a message stays hidden from consumers after being received. 
+
+Fixed timeouts are very simple but can hammer a recovering system. Exponential backoff is gentler, first retry after 30s, next after 60s, then 120s, etc. This is configurable but the main goal here is to give downstream systems time to recover as supposed to retrying at an exact backoff period (too bad we don't have this with SQS yet).
+
+
+### The DLQ as Your Safety Net
+---
+
+Assumeing `maxReceiveCount` has reached and retries have been exhausted, SQS automatically moves the message to your configured DLQ. This is where an engineer would need to intervene and look into the queue.
+
+Ideally, setup your observability monitors to have visibility on the DLQ's depth. Depending on the serverity of the system's journey you can configure your threshold to paged oncall engineer, up to the team. But the goal here is to have awareness when messages are being sent to the DLQ
+
 
 ## Trade-offs & Gotchas
+---
 
-<!-- Nothing comes for free. Be honest about the costs. -->
+I know I'm advocating for this solutions. However, nothing comes for free. Here's something to consider and keep in mind
 
-<!-- Ordering:
-- Kafka guarantees ordering within a partition. Routing through SQS breaks that — messages may be retried and re-processed out of order.
-- Is that okay? For payment processing: maybe not. For notification delivery: probably fine.
-- If ordering matters: mention this pattern isn't a great fit, alternatives like pausing the partition or using a state store -->
 
-<!-- Duplicates and idempotency:
-- SQS Standard queues are at-least-once. You WILL get duplicate messages.
-- Your processing logic must be idempotent — use a unique message key, check a database before re-applying side effects
-- Mention idempotency techniques: storing processed message IDs in DynamoDB/Redis with a TTL -->
+### Bye bye message ordering
+---
 
-<!-- Latency:
-- The happy path is still fast (Kafka → process → done). But a failed message will take visibility_timeout * max_receive_count seconds before hitting DLQ.
-- At 30s timeout + 5 retries, that's ~2.5 minutes before a message is declared dead. Adjust based on your SLA. -->
+Kafka guarantees ordering within a partition. Once you route messages through SQS, that guarantee is basically gone. Messages may be retried and re-processed out of order.
 
-<!-- Cost:
-- SQS is dirt cheap (first 1M requests free, then $0.40 per million)
-- The real cost is operational complexity: you now have two queues to monitor, a retry worker to maintain, a DLQ to watch
-- Worth it for the resiliency gain, but don't pretend it's zero overhead -->
+Can you live with it. You'll have to assess your usecase and your business domain to decide wheather this is something your system can tolerate. In system where strict message ordering is important and non negotiable. This pattern is probably not for you.
 
-<!-- When NOT to use this pattern:
-- Strict ordering requirements
-- Sub-second latency requirements
-- Very high throughput where SQS costs become material (unlikely for most teams)
-- Synchronous request-response patterns where the caller expects an immediate answer -->
+
+### Duplicates Will Definitely Happen
+---
+
+SQS Standard queues are at least once delivery semantic. You **will** be receiving duplicate messages. Your processing logic must be idempotent.
+
+If you ask me, regardless of having a good retry mechanism for your consumers or not. Idempotent is a non negotiable aspect of a system if you're dealing with transactional based systems. 
+
+But for this retry logic to make sense, your code implementation have to idempotent and safe to retry (non negotiable).
+
+
+### Cost is Cheap, Complexity Isn't
+---
+
+SQS itself is dirt cheap, first million requests are free, then $0.40 per million. The real cost here is operational cost. 
+
+Now you need to maintain
+- The main kafka topic and consumer
+- 2 additional queue to monitor (sqs retry queue, sqs DLQ queue), 
+- A retry worker to maintain, 
+- An observability monitoring for DLQ, and 
+- Idempotency logic ensure at most once side effects. 
+
+It's worth it for the resiliency, but don't pretend it's zero overhead.
+
+Internally what we've done is that the platform team have come up with a package that scaffolds the kafka consumer and the SQS retry consumer so the service level code does not have to worry about writing a new consumer. The package handles the service level codes to integrate and spawn these new retry consumers alongside the kafka consumers
+
 
 ## Closing
+---
 
-<!-- Wrap it up, bring it back to the reader -->
+So what did we build?
 
-<!-- What we built:
-- A consumer that doesn't lose data and doesn't block on failure
-- Three tiers: Kafka (hot) → SQS (warm retry) → DLQ (cold, manual intervention)
-- The key insight: commit the offset early, defer the retry to a system built for it -->
+A consumer that doesn't lose messages and doesn't block on failure. Three tiers working together
+- Kafka for the hot path
+- SQS for the warm retry path
+- DLQ for the cold path that needs human intervention
 
-<!-- What this pattern gave us at work:
-- Confidence: no more 2am panic about lost messages
-- Operational peace: fewer on-call pages, clear escalation path through DLQ
-- Observability: you know exactly when and why messages are failing -->
+The mindset shift needed here is that
+- commit the offset early, defer the retry to a system built for it.
 
-<!-- Broader principle:
-- Design for failure, not just the happy path. Your consumers will fail — it's not a question of if, but when.
-- Build the retry path into your architecture from day one, not as an afterthought.
-- The real measure of a system isn't how it performs when everything works — it's how it degrades when things break. -->
+What this gave us at work was confidence. No more 2am panic about lost messages. No more watching consumer lag climb while a downstream API sputters. Clear escalation paths, retry queue growing? That's fine, it's working. DLQ has messages? Someone needs to look.
 
-<!-- Call to action:
-- Look at your own consumers today. What happens when a message fails? If the answer makes you uncomfortable, consider the SQS retry pattern. -->
+The main take away is that we should design system with the potential failure modes in mind, not just the happy path. Your consumers **will** fail, it's not a question of if, but when. Build the retry path into your architecture from day one, not as an afterthought you slap on when things break.
+
+The real measure of a system isn't how it performs when everything works. It's how it degrades when things break and how well does it operates in a degraded state.
+
+Look at your own consumers today. What happens when a message fails? If the answer makes you uncomfortable, consider the SQS retry pattern.
