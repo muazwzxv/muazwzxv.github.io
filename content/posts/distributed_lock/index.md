@@ -13,7 +13,7 @@ draft: false
 
 Here's my first article, here we go!!!
 
-# What is locking?
+## What is locking?
 
 From a computer science perspective, a lock, or a fancier name for it `mutex`, is one of the oldest and most fundamental synchronization primitives in computer science to solve a concurrency problems. It's commonly used to prevent a certain state from either being modified, accessed, or both by multiple threads of execution. There's numerous unique implementations to solve this problem, some behaves differently than others and some relies on different sets of dependencies from others.
 
@@ -41,7 +41,9 @@ Worker - serve asyncrhonous workload (event consumers, background jobs)
 
 Here's the meat of the article, assuming you have multiple worker that'll query the database for `pending` jobs, the worker then picks up the job and executes it.
 
-![image](distributed_lock_3.png "Background job table sample")
+| ID | job_uuid | job_name | job_params | status | created_at | updated_at |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | sample-uuid | send_email | `{"email": "customer_email@gmail.com", "template": "new_joiner_template", "event": "singup"}` | pending | sample | sample |
 
 Worker background job logic
 - polls the database for pending jobs
@@ -167,6 +169,6 @@ func (l *Locker) Unlock(ctx context.Context) error {
 
 - Here's a minimal library in Go to start using distributed locking with Redis [github](https://github.com/muazwzxv/dist-lock)
 - Library was extracted out from an open source project [blnk project](https://github.com/blnkfinance/blnk)
-- If you want to read more about distributed lock, here's a great material from Matin Klepman, the author of Designing Data Intensive Applications [link](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html)
+- If you want to read more about distributed lock, here's a great material from Matin Klepman, the author of Designing Data Intensive Applications [link](https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html) (he hates redlock btw, this article is covering atomic setnx on a single redis node)
 
 Thank you for reading
