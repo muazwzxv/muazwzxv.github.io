@@ -16,7 +16,7 @@ tag = 'tags'
 [params]
 description = "A Tech Blog"
 theme = 'dark'
-colorPalette = 'gruvebox'
+colorPalette = 'base16-eighties'
 hideHeader = false
 
 # Intro on main page, content is markdown
