@@ -140,18 +140,6 @@ There's one rule that makes this all work, `always commit the Kafka offset, even
 
 This was the biggest mental shift for the team. When a message fails, you publish it to SQS and then commit the offset anyway. You're not ignoring the failure, you're deferring it. The message isn't lost. It's sitting in SQS, waiting to be retried. Kafka moves on, your consumer stays healthy, and your partition never clogs.
 
-### Load Shedding and Throttling
----
-
-This pattern does more than just retry failed messages. It also naturally sheds load when there's a surge in traffic and your downstream couldn't keep up and has degraded.
-
-Here's what we discovered in practice, when our downstream dependency is struggling, the consumer fails fast on those messages, pushes them to SQS, and keeps working through the partition. We're not piling more requests onto an already struggling system, we're deferring them. The consumer stays productive, processing whatever it can handle right now.
-
-The visibility timeout also acts as a built-in throttle. A failed message hides for N seconds before reappearing, giving the downstream system room to recover. With exponential backoff, the retry cadence slows down naturally and this all comes with no custom rate-limiting code needed.
-
-This turned out to be one of the biggest operational wins for us. Not only did we stop losing messages, but we also stopped making bad situations worse (retry storm, self inflicted ddos).
-
-This allows our consumer to still operate under a degraded state
 
 ## Architecture Walkthrough
 ---
@@ -258,6 +246,29 @@ It's worth it for the resiliency, but don't pretend it's zero overhead.
 
 Internally what we've done is that the platform team have come up with a package that scaffolds the kafka consumer and the SQS retry consumer so the service level code does not have to worry about writing a new consumer. The package handles the service level codes to integrate and spawn these new retry consumers alongside the kafka consumers
 
+## What's Still Missing: True Backpressure
+---
+
+The retry pattern we built handles decoupling and message durability well, but what it doesn't solve yet, is a critical problem **protecting downstream from overload**.
+
+Here's the uncomfortable truth, assuming 10,000 messages fail and land in SQS, the system now have 10,000 retry attempts queued up. With a `maxReceiveCount` of 10, that's potentially 100,000 requests that will eventually hit your downstream system. The visibility timeout spaces these retries over time, but it doesn't reduce the total volume. When your downstream recovers, the retry storm begins. With no real way of throttling your consumers, you're not really giving space for your downstream dependency to gracefully recovers
+
+This is deferred pressure, not true backpressure.
+
+For production systems handling serious load, we need proper mechanisms that actually throttles or pause processing when downstream struggles. 
+
+Here are three approaches worth considering
+
+**Circuit Breaker** 
+- When failure rates exceed a threshold, the breaker trips and stops all processing temporarily. After a cooldown period, it lets a trickle of requests through to test if downstream has recovered. This prevents cascading failures and gives systems room to breathe.
+
+**Consumer Pause**
+- Dynamically pause Kafka polling when your retry queue depth exceeds a threshold. Stop consuming new messages until the backlog clears and downstream stabilizes.
+
+**Rate Limiter**
+- Hard cap the number of requests per second to downstream, regardless of how many messages are waiting. Let messages naturally back up in Kafka rather than overwhelming a struggling dependency (potentially hurting system's throughput)
+
+The goal isn't just to retry it, but to match your consumer's throughput to what downstream can actually handle. That's true backpressure, and it's an enhancement we still need to build.
 
 ## Closing
 ---
