@@ -81,7 +81,7 @@ In such situation you're left with several `naive` options
 ### Best effort retry and move on
 ---
 
-Assuming the problem was intermittent, some dependency has degraded that's causing the an impact to the consumer. We could setup a best effort retry with a simple backoff (retry n number of times and just move on if that fails). This is better than nothing but you're now left with a partially failed transactions and a broken state (assuming you system is eventually consistent).
+Assuming the problem was intermittent, some dependency has degraded that's impacting the consumer. We could setup a best effort retry with a simple backoff (retry n number of times and just move on if that fails). This is better than nothing but you're now left with a partially failed transactions and a broken state (assuming your system is eventually consistent).
 
 To be fair this is better than no retry mechanism at all and a lot of system start with this approach to balance speed of development and system reliability. Assuming you're only observing some intermittent failures and only 1% of message retries are being exhausted and dropped, it's probably fine to just manually intervene to patch the broken state or republish the drop message. 
 
