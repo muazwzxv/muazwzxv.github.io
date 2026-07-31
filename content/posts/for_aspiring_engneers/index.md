@@ -10,7 +10,7 @@ showTags: true
 hideBackToTop: true
 ---
 
-My hope for this article is that if you're an aspiring engineer or going through internship, or Uni, are able to take some lessions with you.
+My hope for this article is that if you're an aspiring engineer or going through internship, or Uni, are able to take some lessons with you.
 
 # Junior Engineer: The Optimistic Beginner
 
@@ -38,6 +38,7 @@ A Junior Engineer joining a team will always be a fresh breath of air, they're u
 - Be teachable and ask a lot of questions
 - It's okay if you can't solve it, but show me your thought process and run me through the things you've tried
 - Internalise and apply the first principle thinking [read](https://fs.blog/first-principles/)
+- There's a lot of knowledge to pick up, be open to putting in extra learning sessions, this can be books, article or extra courses
 
 ## Thinking like an engineer
 
@@ -45,7 +46,7 @@ A Junior Engineer joining a team will always be a fresh breath of air, they're u
 
 The idea of first principle thinking stripping down a problem right into it's core fundamental and build your solutions from there. 
 
-Example, given an API that is slowing down after 6 months, P95 latency went from 150ms to 1200ms 
+Example, given an API that is slowing down after 6 months, P95 latency went from ~200ms to ~2s 
 
 Reasoning by analogy: 
 - It's slow. 
@@ -53,8 +54,8 @@ Reasoning by analogy:
 - Let's spin up Redis
 
 First principles thinking: 
-- Why is it slow? The database query takes 2 seconds. 
-- Why does it take 2 seconds? Because it's doing a full table scan on 5 million rows. 
+- Why is it slow? The database query takes ~2s. 
+- Why does it take ~2s? Because it's doing a full table scan on 5 million rows. 
 - Why is the database doing a full table scan, because there's no indexing that our query pattern can leverage 
 - Can we just add a B-tree index? Yes, let's do that
 
@@ -79,6 +80,27 @@ But from experience, a lot of people are wrong most of the time (if they didn't 
 - You deployed to production and you were wrong, the extra traffic from your system degraded the service in production.
 
 My biggest takeaway: making assumptions has to be followed up with the muscle to validate them as soon as possible. Regardless of whether it came from you or someone else on your team, any assumption that hasn't been validated shouldn't be in your planning. I'd repeat it as loud as I need it, never make decisions over an assumption.
+
+### There's no right or wrong solution
+
+The reality of engineering is that there is no such thing as a strictly right or wrong, nor a perfect solution. As engineers, we're bounded by time constraints, limited knowledge, and finite resources.
+
+The best solutions are usually the ones where you've identified the trade-offs and you're able to live with them. A decision that is deemed a great solution today might not age well in two years. Hence, it's always important to optimize for today with a decision that is easy to backtrack on, or cheap to deprecate when a newer one is needed.
+
+## Fundamentals is key
+
+In this day and age of AI, it’s incredibly tempting to offload all your thinking to an agent or a copilot. 
+
+Need a complex regex? Generate it. 
+Need a database migration script? Let the AI write it.
+
+While these tools are fantastic for productivity, you should always aim to be fully competent without your agents. Your understanding of how HTTP works under the hood, your ability to read and write SQL, and your grasp of core programming primitives are absolutely non-negotiable. AI should serve as a multiplier, but if your baseline foundational knowledge is zero, multiplying it still leaves you with zero.
+
+The reality is, an agent can generate the code for you, but an agent cannot take accountability for your production issues. 
+
+When a database locks up or an API starts dropping requests, the AI isn't the one getting paged, you are. You need to understand the generated code well enough to own it, defend its trade-offs, and debug it when everything catches on fire. Use AI to type faster, not to think for you.
+
+Never skip the fundamentals and don't be lazy, read the damn output and take time to understand your agent's code
 
 ## Mistakes are expected, leverage that
 
