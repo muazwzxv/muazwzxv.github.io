@@ -15,7 +15,7 @@ tag = 'tags'
 
 [params]
 description = "A Tech Blog"
-theme = 'dark'
+theme = 'light'
 colorPalette = 'base16-eighties'
 hideHeader = false
 
